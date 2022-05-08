@@ -1,18 +1,18 @@
+use json::{object, JsonValue};
+use md5::{Digest, Md5};
 use std::env;
+use std::io::Result;
+use std::iter::Iterator;
 use std::path::Path;
 use std::process::Command;
 use tempfile::*;
-use json::{JsonValue, object};
-use std::io::{Result};
-use md5::{Md5, Digest};
-use std::iter::Iterator;
 
-const REDO_DATA : &str = ".redo.json";
+const REDO_DATA: &str = ".redo.json";
 
 fn _program_name() -> String {
     if let Some(exe) = env::current_exe().ok() {
         if let Some(file) = exe.file_name() {
-            return String::from(file.to_str().unwrap())
+            return String::from(file.to_str().unwrap());
         }
     }
     String::from("redo")
@@ -21,7 +21,10 @@ fn _program_name() -> String {
 fn do_file(target: &str) -> String {
     let do_script = String::from(target) + ".do";
     if !Path::new(&do_script).exists() {
-        eprintln!("[REDO ERROR] Couldn't find '{}' script for given target '{}'", do_script, target);
+        eprintln!(
+            "[REDO ERROR] Couldn't find '{}' script for given target '{}'",
+            do_script, target
+        );
         std::process::exit(1);
     }
     do_script
@@ -29,80 +32,71 @@ fn do_file(target: &str) -> String {
 
 fn basename(target: &str) -> String {
     std::path::Path::new(target)
-        .file_name().unwrap()
+        .file_name()
+        .unwrap()
         .to_owned()
-        .into_string().unwrap()
+        .into_string()
+        .unwrap()
 }
 
 fn read() -> JsonValue {
     if let Ok(content) = std::fs::read_to_string(REDO_DATA) {
-        json::parse(&content).ok().unwrap_or_else(|| panic!("Invalid JSON in file {}", REDO_DATA))
+        json::parse(&content)
+            .ok()
+            .unwrap_or_else(|| panic!("Invalid JSON in file {}", REDO_DATA))
     } else {
         JsonValue::Array(vec![])
     }
 }
 
 fn write(target: &str, depenency: &str, hash: &str) -> Result<()> {
-    let mut entries = match read() {
-        JsonValue::Array(vec) => vec,
-        _ => panic!("invalid json: array must be a top level element"),
-    };
+    let mut entries = read();
 
-    let mut found = false;
-    for entry in &mut entries {
-        if !entry.is_object() {
-            panic!("Entry {:?} is not an object", entry);
+    if let Some(ref mut entry) = entries
+        .members_mut()
+        .find(|entry| entry["target"] == target)
+    {
+        if let Some(ref mut dep) = entry["dependencies"]
+            .members_mut()
+            .find(|entry| entry["name"] == depenency)
+        {
+            dep["hash"] = JsonValue::String(String::from(hash));
+        } else {
+            entry["dependencies"]
+                .push(object! { name: depenency, hash: hash })
+                .expect("failed to push new dependency");
         }
-
-        if entry["target"] == target {
-            if !entry.has_key("dependencies") {
-                entry["dependencies"] = JsonValue::Array(vec![]);
-            }
-            match &mut entry["dependencies"] {
-                JsonValue::Array(array) => {
-                    if let Some(dep) = array.iter_mut().find(|entry| entry["name"] == depenency) {
-                        dep["hash"] = JsonValue::String(String::from(hash));
-                    } else {
-                        entry["dependencies"]
-                            .push(object! { name: depenency, hash: hash })
-                            .expect("failed to push new dependency");
-                    }
-                },
-                _ => panic!("dependencies is not an array")
-            };
-            found = true;
-            break;
-        }
-    }
-    if !found {
-        entries.push(object! {
-            target: target,
-            dependencies: [ object! { name: depenency, hash: hash } ]
-        });
+    } else {
+        entries
+            .push(object! {
+                target: target,
+                dependencies: [ object! { name: depenency, hash: hash } ]
+            })
+            .unwrap();
     }
 
     std::fs::write(REDO_DATA, json::stringify_pretty(entries, 2))
 }
 
 fn needs_update(target: &str) -> bool {
-    match read() {
-        JsonValue::Array(entries) => {
-            entries.iter()
-                .find(|entry| entry["target"] == target)
-                .iter()
-                .filter_map(|entry| match &entry["dependencies"] {
-                    JsonValue::Array(array) => Some(array.iter()),
-                    _ => None,
-                })
-                .flatten()
-                .any(|dep| {
-                    dep["name"].as_str()
-                        .and_then(|name| hash(name).ok())
-                        .map(|hash| hash != dep["hash"])
-                        .unwrap_or(true)
-                })
-        },
-        _ => true
+    let entries = read();
+
+    if let Some(target) = entries.members().find(|entry| entry["target"] == target) {
+        let mut at_least_one_iteration = false;
+        for dep in target["dependencies"].members() {
+            at_least_one_iteration = true;
+            if dep["name"]
+                .as_str()
+                .and_then(|name| hash(name).ok())
+                .map(|hash| hash != dep["hash"])
+                .unwrap_or(true)
+            {
+                return true;
+            }
+        }
+        !at_least_one_iteration
+    } else {
+        true
     }
 }
 
@@ -116,7 +110,7 @@ fn hash(path: &str) -> Result<String> {
 fn redo(target: &str) -> Result<()> {
     if !needs_update(target) {
         println!("{} is up to date", target);
-        return Ok(())
+        return Ok(());
     }
 
     let do_file = do_file(target);
@@ -127,12 +121,21 @@ fn redo(target: &str) -> Result<()> {
     let tmp_path = tmp.into_temp_path();
 
     let status = Command::new("sh")
-        .args([ "-e", &do_file, "", &basename(target), tmp_path.to_str().unwrap()])
+        .args([
+            "-e",
+            &do_file,
+            "",
+            &basename(target),
+            tmp_path.to_str().unwrap(),
+        ])
         .status();
 
     let exit_code = status?.code().unwrap_or(1);
     if exit_code != 0 {
-        eprintln!("[REDO ERROR] Do script ended with non-zero exit code: {}", exit_code);
+        eprintln!(
+            "[REDO ERROR] Do script ended with non-zero exit code: {}",
+            exit_code
+        );
         std::process::exit(1);
     }
 
@@ -140,7 +143,6 @@ fn redo(target: &str) -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    let _top = env::current_dir()?;
     for arg in env::args().skip(1) {
         redo(&arg)?
     }
