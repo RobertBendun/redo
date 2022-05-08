@@ -5,6 +5,7 @@ use tempfile::*;
 use json::{JsonValue, object};
 use std::io::{Result};
 use md5::{Md5, Digest};
+use std::iter::Iterator;
 
 const REDO_DATA : &str = ".redo.json";
 
@@ -57,9 +58,18 @@ fn write(target: &str, depenency: &str, hash: &str) -> Result<()> {
             if !entry.has_key("dependencies") {
                 entry["dependencies"] = JsonValue::Array(vec![]);
             }
-            entry["dependencies"]
-                .push(object! { name: depenency, hash: hash })
-                .expect("failed to push new dependency");
+            match &mut entry["dependencies"] {
+                JsonValue::Array(array) => {
+                    if let Some(dep) = array.iter_mut().find(|entry| entry["name"] == depenency) {
+                        dep["hash"] = JsonValue::String(String::from(hash));
+                    } else {
+                        entry["dependencies"]
+                            .push(object! { name: depenency, hash: hash })
+                            .expect("failed to push new dependency");
+                    }
+                },
+                _ => panic!("dependencies is not an array")
+            };
             found = true;
             break;
         }
@@ -74,6 +84,28 @@ fn write(target: &str, depenency: &str, hash: &str) -> Result<()> {
     std::fs::write(REDO_DATA, json::stringify_pretty(entries, 2))
 }
 
+fn needs_update(target: &str) -> bool {
+    match read() {
+        JsonValue::Array(entries) => {
+            entries.iter()
+                .find(|entry| entry["target"] == target)
+                .iter()
+                .filter_map(|entry| match &entry["dependencies"] {
+                    JsonValue::Array(array) => Some(array.iter()),
+                    _ => None,
+                })
+                .flatten()
+                .any(|dep| {
+                    dep["name"].as_str()
+                        .and_then(|name| hash(name).ok())
+                        .map(|hash| hash != dep["hash"])
+                        .unwrap_or(true)
+                })
+        },
+        _ => true
+    }
+}
+
 fn hash(path: &str) -> Result<String> {
     let mut hasher = Md5::new();
     std::io::copy(&mut std::fs::File::open(path)?, &mut hasher).unwrap();
@@ -82,6 +114,11 @@ fn hash(path: &str) -> Result<String> {
 }
 
 fn redo(target: &str) -> Result<()> {
+    if !needs_update(target) {
+        println!("{} is up to date", target);
+        return Ok(())
+    }
+
     let do_file = do_file(target);
     write(target, &do_file, &hash(&do_file)?)?;
 
