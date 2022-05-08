@@ -1,0 +1,6 @@
+/target
+*.do
+*.c
+*.json
+.ccls-cache
+*.lock
