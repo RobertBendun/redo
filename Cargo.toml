@@ -1,9 +1,12 @@
 [package]
-name = "redo"
+name = "redone"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "djb redo redone in Rust"
+license = "Unlicense"
+documentation = "https://docs.rs/redone"
+homepage = "https://github.com/RobertBendun/redone"
+repository = "https://github.com/RobertBendun/redone"
 
 [[bin]]
 name = "redo"
