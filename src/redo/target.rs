@@ -6,22 +6,26 @@ use tempfile::*;
 
 pub use crate::dependency::Dependency;
 
+/// Cache file for dependencies hashes for targets (one per directory)
 pub const REDO_DATA: &str = ".redo.json";
 
+/// Target describes `redo` target that supposed to be build
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Target {
     #[serde(alias = "target")]
-    path: PathBuf,
-    dependencies: Vec<Dependency>,
+    pub path: PathBuf,
+    pub dependencies: Vec<Dependency>,
 }
 
 type Targets = Vec<Target>;
 
 impl Target {
+    /// Load target from cache
     pub fn load(target: &str) -> Target {
         Target::load_from_redo_cache(target)
     }
 
+    /// Determines if Target needs to be updated based on dependencies
     pub fn needs_update(&self) -> bool {
         let mut at_least_one_iteration = false;
         for dep in self.dependencies.iter() {
@@ -33,6 +37,13 @@ impl Target {
         !at_least_one_iteration
     }
 
+    /// Executes `redo` mechanics according to specification
+    ///
+    /// - If file is up to date then inform user and return
+    /// - Otherwise:
+    ///   - Update dependencies and their hashes
+    ///   - Save dependencies to cache file
+    ///   - run associated `.do` file to produce target
     pub fn redo(mut self) -> Result<()> {
         if !self.needs_update() {
             println!("{} is up to date", self.path.to_str().unwrap());
