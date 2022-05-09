@@ -1,10 +1,10 @@
 use md5::{Digest, Md5};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Dependency {
     pub name: std::path::PathBuf,
-    pub hash: String
+    pub hash: String,
 }
 
 impl Dependency {

@@ -1,8 +1,8 @@
+use serde::{Deserialize, Serialize};
 use std::io::Result;
+use std::path::PathBuf;
 use std::process::Command;
 use tempfile::*;
-use std::path::PathBuf;
-use serde::{Serialize, Deserialize};
 
 pub use crate::dependency::Dependency;
 
@@ -10,9 +10,9 @@ pub const REDO_DATA: &str = ".redo.json";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Target {
-    #[serde(alias="target")]
+    #[serde(alias = "target")]
     path: PathBuf,
-    dependencies: Vec<Dependency>
+    dependencies: Vec<Dependency>,
 }
 
 type Targets = Vec<Target>;
@@ -80,7 +80,7 @@ impl Target {
             .find(|cached| cached.path == target_path)
             .unwrap_or_else(|| Target {
                 path: PathBuf::from(target),
-                dependencies: vec![]
+                dependencies: vec![],
             });
 
         target.ensure_do_dependency_exists();
@@ -102,9 +102,9 @@ impl Target {
     }
 }
 
-fn into_io_result<T, E>(result : std::result::Result<T, E>) -> std::io::Result<T>
+fn into_io_result<T, E>(result: std::result::Result<T, E>) -> std::io::Result<T>
 where
-    E: Into<Box<dyn std::error::Error + Send + Sync>>
+    E: Into<Box<dyn std::error::Error + Send + Sync>>,
 {
     use std::io::*;
     match result {

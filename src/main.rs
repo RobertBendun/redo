@@ -1,7 +1,7 @@
+use redo::Target;
 use std::env;
 use std::io::Result;
 use std::iter::Iterator;
-use redo::Target;
 
 fn _program_name() -> String {
     if let Some(exe) = env::current_exe().ok() {
